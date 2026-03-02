@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { call } from '$lib/rpc-client';
+import { invoke } from '@tauri-apps/api/core';
 
 export interface DeviceInfo {
   deviceId: string;
@@ -49,4 +50,21 @@ export async function importIdentity(
   passphrase: string,
 ): Promise<{ success: boolean; requiresRestart: boolean }> {
   return call('identity.import', { encrypted, passphrase });
+}
+
+export async function hasPasskey(): Promise<boolean> {
+  return invoke<boolean>('passkey_has_key');
+}
+
+export async function exportIdentityWithPasskey(): Promise<string> {
+  const key = await invoke<string>('passkey_generate_key');
+  const result = await call<{ encrypted: string }>('identity.exportWithKey', { key });
+  return result.encrypted;
+}
+
+export async function importIdentityWithPasskey(
+  encrypted: string,
+): Promise<{ success: boolean; requiresRestart: boolean }> {
+  const key = await invoke<string>('passkey_get_key');
+  return call('identity.importWithKey', { encrypted, key });
 }

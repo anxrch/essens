@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import sodium from 'sodium-universal'
 import b4a from 'b4a'
-import { generateKeypair, encryptSecret, decryptSecret } from './crypto.js'
+import { generateKeypair, encryptSecret, decryptSecret, encryptSecretWithKey, decryptSecretWithKey } from './crypto.js'
 import type { Keypair, AuthorHex, DeviceId } from './types.js'
 
 const KEYPAIR_FILENAME = 'identity.json'
@@ -15,6 +15,8 @@ export interface IdentityManager {
   getDeviceId(): DeviceId
   exportIdentity(passphrase: string): string
   importIdentity(storagePath: string, encrypted: string, passphrase: string): Promise<void>
+  exportIdentityWithKey(key: Buffer): string
+  importIdentityWithKey(storagePath: string, encrypted: string, key: Buffer): Promise<void>
 }
 
 export function createIdentityManager(): IdentityManager {
@@ -79,6 +81,29 @@ export function createIdentityManager(): IdentityManager {
 
     async importIdentity(storagePath: string, encrypted: string, passphrase: string) {
       const combined = decryptSecret(encrypted, passphrase)
+      const publicKey = combined.subarray(0, sodium.crypto_sign_PUBLICKEYBYTES)
+      const secretKey = combined.subarray(sodium.crypto_sign_PUBLICKEYBYTES)
+
+      keypair = { publicKey, secretKey }
+
+      await fs.mkdir(storagePath, { recursive: true })
+      await fs.writeFile(
+        path.join(storagePath, KEYPAIR_FILENAME),
+        JSON.stringify({
+          publicKey: b4a.toString(publicKey, 'hex'),
+          secretKey: b4a.toString(secretKey, 'hex'),
+        }, null, 2),
+      )
+    },
+
+    exportIdentityWithKey(key: Buffer): string {
+      if (!keypair) throw new Error('Identity not initialized')
+      const combined = b4a.concat([keypair.publicKey, keypair.secretKey])
+      return encryptSecretWithKey(combined, key)
+    },
+
+    async importIdentityWithKey(storagePath: string, encrypted: string, key: Buffer) {
+      const combined = decryptSecretWithKey(encrypted, key)
       const publicKey = combined.subarray(0, sodium.crypto_sign_PUBLICKEYBYTES)
       const secretKey = combined.subarray(sodium.crypto_sign_PUBLICKEYBYTES)
 

@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import sodium from 'sodium-universal'
+import b4a from 'b4a'
 import { createIdentityManager } from '../identity.js'
 
 describe('IdentityManager', () => {
@@ -113,6 +115,52 @@ describe('IdentityManager', () => {
       await expect(
         mgr2.importIdentity(tmpDir2, encrypted, 'wrong-pass'),
       ).rejects.toThrow('Decryption failed')
+    } finally {
+      await fs.rm(tmpDir2, { recursive: true, force: true })
+    }
+  })
+
+  it('export and import identity with raw key', async () => {
+    const mgr1 = createIdentityManager()
+    await mgr1.init(tmpDir)
+    const author1 = mgr1.getAuthorHex()
+
+    const key = b4a.alloc(sodium.crypto_secretbox_KEYBYTES)
+    sodium.randombytes_buf(key)
+
+    const encrypted = mgr1.exportIdentityWithKey(key)
+    expect(typeof encrypted).toBe('string')
+
+    const tmpDir2 = await fs.mkdtemp(path.join(os.tmpdir(), 'essens-import-key-'))
+    try {
+      const mgr2 = createIdentityManager()
+      await mgr2.importIdentityWithKey(tmpDir2, encrypted, key)
+      await mgr2.init(tmpDir2)
+
+      expect(mgr2.getAuthorHex()).toBe(author1)
+      expect(mgr2.getDeviceId()).not.toBe(mgr1.getDeviceId())
+    } finally {
+      await fs.rm(tmpDir2, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects wrong key on import', async () => {
+    const mgr = createIdentityManager()
+    await mgr.init(tmpDir)
+
+    const key1 = b4a.alloc(sodium.crypto_secretbox_KEYBYTES)
+    sodium.randombytes_buf(key1)
+    const key2 = b4a.alloc(sodium.crypto_secretbox_KEYBYTES)
+    sodium.randombytes_buf(key2)
+
+    const encrypted = mgr.exportIdentityWithKey(key1)
+
+    const tmpDir2 = await fs.mkdtemp(path.join(os.tmpdir(), 'essens-import-key-'))
+    try {
+      const mgr2 = createIdentityManager()
+      await expect(
+        mgr2.importIdentityWithKey(tmpDir2, encrypted, key2),
+      ).rejects.toThrow('wrong key')
     } finally {
       await fs.rm(tmpDir2, { recursive: true, force: true })
     }

@@ -3,6 +3,10 @@ use tauri::Emitter;
 use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
+use rand::RngCore;
+
+const KEYRING_SERVICE: &str = "com.essens.app";
+const KEYRING_USER: &str = "identity-export-key";
 
 struct SidecarState {
     child: Mutex<Option<CommandChild>>,
@@ -20,11 +24,58 @@ fn rpc_call(state: tauri::State<'_, SidecarState>, request: String) -> Result<()
     Ok(())
 }
 
+#[tauri::command]
+fn passkey_generate_key() -> Result<String, String> {
+    let mut key = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut key);
+    let hex_key: String = key.iter().map(|b| format!("{:02x}", b)).collect();
+
+    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
+        .map_err(|e| format!("keyring init: {}", e))?;
+    entry.set_password(&hex_key)
+        .map_err(|e| format!("keyring store: {}", e))?;
+
+    Ok(hex_key)
+}
+
+#[tauri::command]
+fn passkey_get_key() -> Result<String, String> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
+        .map_err(|e| format!("keyring init: {}", e))?;
+    entry.get_password()
+        .map_err(|e| format!("keyring retrieve: {}", e))
+}
+
+#[tauri::command]
+fn passkey_has_key() -> Result<bool, String> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
+        .map_err(|e| format!("keyring init: {}", e))?;
+    match entry.get_password() {
+        Ok(_) => Ok(true),
+        Err(keyring::Error::NoEntry) => Ok(false),
+        Err(e) => Err(format!("keyring check: {}", e)),
+    }
+}
+
+#[tauri::command]
+fn passkey_delete_key() -> Result<(), String> {
+    let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_USER)
+        .map_err(|e| format!("keyring init: {}", e))?;
+    entry.delete_credential()
+        .map_err(|e| format!("keyring delete: {}", e))
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![rpc_call])
+        .invoke_handler(tauri::generate_handler![
+            rpc_call,
+            passkey_generate_key,
+            passkey_get_key,
+            passkey_has_key,
+            passkey_delete_key
+        ])
         .setup(|app| {
             // Open devtools in debug builds
             #[cfg(debug_assertions)]

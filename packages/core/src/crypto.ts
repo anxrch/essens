@@ -87,6 +87,49 @@ export function decryptSecret(encrypted: string, passphrase: string): Buffer {
 }
 
 /**
+ * Encrypt a secret with a raw 32-byte key (no passphrase derivation).
+ * Format: version(1) + nonce(24) + ciphertext → base64
+ */
+export function encryptSecretWithKey(secret: Buffer, key: Buffer): string {
+  const VERSION = 0x01
+  const nonce = b4a.alloc(sodium.crypto_secretbox_NONCEBYTES)
+  sodium.randombytes_buf(nonce)
+
+  const ciphertext = b4a.alloc(secret.length + sodium.crypto_secretbox_MACBYTES)
+  sodium.crypto_secretbox_easy(ciphertext, secret, nonce, key)
+
+  const versionBuf = b4a.alloc(1)
+  versionBuf[0] = VERSION
+  const packed = b4a.concat([versionBuf, nonce, ciphertext])
+  return b4a.toString(packed, 'base64')
+}
+
+/**
+ * Decrypt a secret encrypted with encryptSecretWithKey.
+ * Throws if the key is wrong or data is corrupted.
+ */
+export function decryptSecretWithKey(encrypted: string, key: Buffer): Buffer {
+  const packed = b4a.from(encrypted, 'base64')
+
+  const version = packed[0]
+  if (version !== 0x01) {
+    throw new Error('Unsupported encryption format')
+  }
+
+  const nonceLen = sodium.crypto_secretbox_NONCEBYTES // 24
+  const nonce = packed.subarray(1, 1 + nonceLen)
+  const ciphertext = packed.subarray(1 + nonceLen)
+
+  const plaintext = b4a.alloc(ciphertext.length - sodium.crypto_secretbox_MACBYTES)
+  const ok = sodium.crypto_secretbox_open_easy(plaintext, ciphertext, nonce, key)
+  if (!ok) {
+    throw new Error('Decryption failed: wrong key')
+  }
+
+  return plaintext
+}
+
+/**
  * Derive a 32-byte discovery topic for an author's Ed25519 public key.
  * Used as a DHT rendezvous point so devices and followers can find each other.
  */

@@ -78,6 +78,30 @@ export function createRpcServer(deps: RpcDeps) {
     return { success: true, requiresRestart: true }
   })
 
+  methods.set('identity.exportWithKey', async (params) => {
+    const keyHex = params.key as string
+    if (!keyHex || keyHex.length !== 64 || !/^[0-9a-f]+$/i.test(keyHex)) {
+      throw new Error('key must be a 64-char hex string (32 bytes)')
+    }
+    const key = Buffer.from(keyHex, 'hex')
+    const encrypted = deps.identity.exportIdentityWithKey(key)
+    return { encrypted }
+  })
+
+  methods.set('identity.importWithKey', async (params) => {
+    const encrypted = params.encrypted as string
+    const keyHex = params.key as string
+    if (!encrypted || !keyHex) {
+      throw new Error('Both encrypted and key are required')
+    }
+    if (keyHex.length !== 64 || !/^[0-9a-f]+$/i.test(keyHex)) {
+      throw new Error('key must be a 64-char hex string (32 bytes)')
+    }
+    const key = Buffer.from(keyHex, 'hex')
+    await deps.identity.importIdentityWithKey(deps.storagePath, encrypted, key)
+    return { success: true, requiresRestart: true }
+  })
+
   // --- feed ---
   methods.set('feed.append', async (params) => {
     const kind = params.kind as EventKind

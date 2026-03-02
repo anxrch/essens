@@ -21,7 +21,7 @@ export type {
 } from './types.js'
 
 export { stableStringify, canonicalUnsignedBytes, computeEventId } from './canonical.js'
-export { generateKeypair, sign, verify, encryptSecret, decryptSecret, authorDiscoveryTopic } from './crypto.js'
+export { generateKeypair, sign, verify, encryptSecret, decryptSecret, encryptSecretWithKey, decryptSecretWithKey, authorDiscoveryTopic } from './crypto.js'
 export { validateBody } from './schema.js'
 export { createSignedEnvelope, verifyEnvelope } from './envelope.js'
 export type { CreateEnvelopeParams } from './envelope.js'
