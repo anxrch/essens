@@ -148,5 +148,5 @@ jobs:
             - **macOS**: `.dmg`
             - **Windows**: `.exe` (NSIS installer) or `.msi`
           releaseDraft: false
-          prerelease: true
+          prerelease: false
           args: --target ${{ matrix.target }}
