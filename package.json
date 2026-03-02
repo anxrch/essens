@@ -1,0 +1,17 @@
+{
+  "name": "essens",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:core": "pnpm -F @essens/core build",
+    "build:sidecar": "pnpm -F @essens/sidecar build",
+    "build:desktop": "pnpm -F @essens/desktop build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev": "pnpm -F @essens/desktop dev"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.0"
+  }
+}

@@ -1,0 +1,116 @@
+<script lang="ts">
+  import { deletePost, type PostEvent } from '$lib/stores/timeline';
+
+  interface Props {
+    post: PostEvent;
+  }
+
+  let { post }: Props = $props();
+  let deleting = $state(false);
+
+  async function handleDelete() {
+    if (deleting) return;
+    deleting = true;
+    try {
+      await deletePost(post.id);
+    } catch (err) {
+      console.error('Failed to delete post:', err);
+      deleting = false;
+    }
+  }
+
+  function formatTime(iso: string): string {
+    const d = new Date(iso);
+    const now = new Date();
+    const diff = now.getTime() - d.getTime();
+    if (diff < 60_000) return 'just now';
+    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+    if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+    return d.toLocaleDateString();
+  }
+
+  function truncateKey(key: string): string {
+    return key.slice(0, 8) + '...';
+  }
+</script>
+
+<article class="post-card">
+  <div class="post-header">
+    <span class="author" title={post.author}>{truncateKey(post.author)}</span>
+    <span class="time">{formatTime(post.createdAt)}</span>
+  </div>
+  <p class="text">{post.body.text}</p>
+  {#if post.body.tags && post.body.tags.length > 0}
+    <div class="tags">
+      {#each post.body.tags as tag}
+        <span class="tag">#{tag}</span>
+      {/each}
+    </div>
+  {/if}
+  <div class="post-actions">
+    <button class="delete-btn" onclick={handleDelete} disabled={deleting}>
+      {deleting ? 'Deleting...' : 'Delete'}
+    </button>
+  </div>
+</article>
+
+<style>
+  .post-card {
+    padding: 1rem;
+    border-bottom: 1px solid #2a2a2a;
+  }
+  .post-card:hover {
+    background: #1c1c1c;
+  }
+  .post-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.375rem;
+  }
+  .author {
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: #2563eb;
+  }
+  .time {
+    font-size: 0.75rem;
+    color: #666;
+  }
+  .text {
+    margin: 0;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .tags {
+    margin-top: 0.375rem;
+    display: flex;
+    gap: 0.375rem;
+    flex-wrap: wrap;
+  }
+  .tag {
+    font-size: 0.75rem;
+    color: #2563eb;
+    background: #1e293b;
+    padding: 0.125rem 0.375rem;
+    border-radius: 3px;
+  }
+  .post-actions {
+    margin-top: 0.375rem;
+  }
+  .delete-btn {
+    font-size: 0.7rem;
+    color: #666;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0.125rem 0.25rem;
+  }
+  .delete-btn:hover:not(:disabled) {
+    color: #ef4444;
+  }
+  .delete-btn:disabled {
+    opacity: 0.5;
+  }
+</style>
