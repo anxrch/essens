@@ -16,6 +16,7 @@ export type {
   EventBody,
   UnsignedEnvelope,
   SignedEnvelope,
+  Visibility,
   TimelineEntry,
   ProfileSnapshot,
 } from './types.js'
@@ -34,7 +35,7 @@ export type { FeedManager } from './feed.js'
 export { createIndexer } from './indexer.js'
 export type { Indexer } from './indexer.js'
 export { createTimelineQuery } from './timeline.js'
-export type { TimelineQuery } from './timeline.js'
+export type { TimelineQuery, VisibilityFilter } from './timeline.js'
 export { createFollowsQuery } from './follows.js'
 export type { FollowsQuery, FollowEntry } from './follows.js'
 export { createSyncManager } from './sync.js'

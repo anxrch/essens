@@ -1,12 +1,18 @@
 <script lang="ts">
   import { deletePost, type PostEvent } from '$lib/stores/timeline';
+  import { identity } from '$lib/stores/identity';
+  import { Lock } from 'lucide-svelte';
 
   interface Props {
     post: PostEvent;
+    onauthorclick?: (author: string) => void;
   }
 
-  let { post }: Props = $props();
+  let { post, onauthorclick }: Props = $props();
   let deleting = $state(false);
+
+  const isOwn = $derived($identity?.author === post.author);
+  const isPrivate = $derived(post.body.visibility === 'private');
 
   async function handleDelete() {
     if (deleting) return;
@@ -17,6 +23,10 @@
       console.error('Failed to delete post:', err);
       deleting = false;
     }
+  }
+
+  function handleAuthorClick() {
+    onauthorclick?.(post.author);
   }
 
   function formatTime(iso: string): string {
@@ -36,7 +46,14 @@
 
 <article class="post-card">
   <div class="post-header">
-    <span class="author" title={post.author}>{truncateKey(post.author)}</span>
+    <div class="header-left">
+      <button class="author" title={post.author} onclick={handleAuthorClick}>
+        {truncateKey(post.author)}
+      </button>
+      {#if isPrivate}
+        <span class="private-badge" title="Followers only"><Lock size={12} /></span>
+      {/if}
+    </div>
     <span class="time">{formatTime(post.createdAt)}</span>
   </div>
   <p class="text">{post.body.text}</p>
@@ -47,11 +64,13 @@
       {/each}
     </div>
   {/if}
-  <div class="post-actions">
-    <button class="delete-btn" onclick={handleDelete} disabled={deleting}>
-      {deleting ? 'Deleting...' : 'Delete'}
-    </button>
-  </div>
+  {#if isOwn}
+    <div class="post-actions">
+      <button class="delete-btn" onclick={handleDelete} disabled={deleting}>
+        {deleting ? 'Deleting...' : 'Delete'}
+      </button>
+    </div>
+  {/if}
 </article>
 
 <style>
@@ -67,10 +86,28 @@
     justify-content: space-between;
     margin-bottom: 0.375rem;
   }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+  }
   .author {
     font-family: monospace;
     font-size: 0.75rem;
     color: #2563eb;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+  }
+  .author:hover {
+    text-decoration: underline;
+    color: #3b82f6;
+  }
+  .private-badge {
+    display: flex;
+    align-items: center;
+    color: #888;
   }
   .time {
     font-size: 0.75rem;

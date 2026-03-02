@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import fs from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import b4a from 'b4a'
 import { createEssensStore } from '../store.js'
 import { createFeedManager } from '../feed.js'
 import { createIndexer } from '../indexer.js'
@@ -183,6 +184,252 @@ describe('Indexer + Timeline', () => {
 
     const event = await timeline.getEvent(db, p1.id)
     expect(event).not.toBeNull()
+
+    await store.close()
+  })
+
+  it('stores visibility in timeline index', async () => {
+    const store = createEssensStore()
+    await store.init(tmpDir)
+    const feed = store.getPrimaryFeed()
+    const db = store.getIndexDb()
+    const kp = generateKeypair()
+    const feedMgr = createFeedManager()
+    const indexer = createIndexer()
+    const timeline = createTimelineQuery()
+
+    const pub = await feedMgr.append(feed, kp, 'post.create', { text: 'public post', visibility: 'public' })
+    await indexer.indexEvent(db, pub)
+
+    await new Promise(r => setTimeout(r, 5))
+
+    const priv = await feedMgr.append(feed, kp, 'post.create', { text: 'private post', visibility: 'private' })
+    await indexer.indexEvent(db, priv)
+
+    const entries = await timeline.getRecent(db)
+    expect(entries).toHaveLength(2)
+    expect(entries[0].visibility).toBe('private')
+    expect(entries[1].visibility).toBe('public')
+
+    await store.close()
+  })
+
+  it('defaults visibility to public for posts without visibility field', async () => {
+    const store = createEssensStore()
+    await store.init(tmpDir)
+    const feed = store.getPrimaryFeed()
+    const db = store.getIndexDb()
+    const kp = generateKeypair()
+    const feedMgr = createFeedManager()
+    const indexer = createIndexer()
+    const timeline = createTimelineQuery()
+
+    const post = await feedMgr.append(feed, kp, 'post.create', { text: 'no visibility set' })
+    await indexer.indexEvent(db, post)
+
+    const entries = await timeline.getRecent(db)
+    expect(entries).toHaveLength(1)
+    expect(entries[0].visibility).toBe('public')
+
+    await store.close()
+  })
+
+  it('getRecentFiltered hides private posts from non-followers', async () => {
+    const store = createEssensStore()
+    await store.init(tmpDir)
+    const feed = store.getPrimaryFeed()
+    const db = store.getIndexDb()
+    const kpAuthor = generateKeypair()
+    const kpViewer = generateKeypair()
+    const feedMgr = createFeedManager()
+    const indexer = createIndexer()
+    const timeline = createTimelineQuery()
+
+    const authorHex = b4a.toString(kpAuthor.publicKey, 'hex')
+    const viewerHex = b4a.toString(kpViewer.publicKey, 'hex')
+
+    const pub = await feedMgr.append(feed, kpAuthor, 'post.create', { text: 'public' })
+    await indexer.indexEvent(db, pub)
+
+    await new Promise(r => setTimeout(r, 5))
+
+    const priv = await feedMgr.append(feed, kpAuthor, 'post.create', { text: 'private', visibility: 'private' })
+    await indexer.indexEvent(db, priv)
+
+    // Non-follower should only see public
+    const filtered = await timeline.getRecentFiltered(db, 50, {
+      currentAuthor: viewerHex,
+      followingSet: new Set(),
+    })
+    expect(filtered).toHaveLength(1)
+    expect(filtered[0].eventId).toBe(pub.id)
+
+    await store.close()
+  })
+
+  it('getRecentFiltered shows private posts to followers', async () => {
+    const store = createEssensStore()
+    await store.init(tmpDir)
+    const feed = store.getPrimaryFeed()
+    const db = store.getIndexDb()
+    const kpAuthor = generateKeypair()
+    const kpViewer = generateKeypair()
+    const feedMgr = createFeedManager()
+    const indexer = createIndexer()
+    const timeline = createTimelineQuery()
+
+    const authorHex = b4a.toString(kpAuthor.publicKey, 'hex')
+    const viewerHex = b4a.toString(kpViewer.publicKey, 'hex')
+
+    const pub = await feedMgr.append(feed, kpAuthor, 'post.create', { text: 'public' })
+    await indexer.indexEvent(db, pub)
+
+    await new Promise(r => setTimeout(r, 5))
+
+    const priv = await feedMgr.append(feed, kpAuthor, 'post.create', { text: 'private', visibility: 'private' })
+    await indexer.indexEvent(db, priv)
+
+    // Follower should see both
+    const filtered = await timeline.getRecentFiltered(db, 50, {
+      currentAuthor: viewerHex,
+      followingSet: new Set([authorHex]),
+    })
+    expect(filtered).toHaveLength(2)
+
+    await store.close()
+  })
+
+  it('getRecentFiltered shows private posts to the author themselves', async () => {
+    const store = createEssensStore()
+    await store.init(tmpDir)
+    const feed = store.getPrimaryFeed()
+    const db = store.getIndexDb()
+    const kp = generateKeypair()
+    const feedMgr = createFeedManager()
+    const indexer = createIndexer()
+    const timeline = createTimelineQuery()
+
+    const authorHex = b4a.toString(kp.publicKey, 'hex')
+
+    const pub = await feedMgr.append(feed, kp, 'post.create', { text: 'public' })
+    await indexer.indexEvent(db, pub)
+
+    await new Promise(r => setTimeout(r, 5))
+
+    const priv = await feedMgr.append(feed, kp, 'post.create', { text: 'private', visibility: 'private' })
+    await indexer.indexEvent(db, priv)
+
+    // Author should see own private posts
+    const filtered = await timeline.getRecentFiltered(db, 50, {
+      currentAuthor: authorHex,
+      followingSet: new Set(),
+    })
+    expect(filtered).toHaveLength(2)
+
+    await store.close()
+  })
+
+  it('getAuthorPosts returns only post.create events for a specific author', async () => {
+    const store = createEssensStore()
+    await store.init(tmpDir)
+    const feed = store.getPrimaryFeed()
+    const db = store.getIndexDb()
+    const kp = generateKeypair()
+    const feedMgr = createFeedManager()
+    const indexer = createIndexer()
+    const timeline = createTimelineQuery()
+
+    const authorHex = b4a.toString(kp.publicKey, 'hex')
+
+    const p1 = await feedMgr.append(feed, kp, 'post.create', { text: 'first' })
+    await indexer.indexEvent(db, p1)
+
+    const prof = await feedMgr.append(feed, kp, 'profile.update', { displayName: 'alice' })
+    await indexer.indexEvent(db, prof)
+
+    const p2 = await feedMgr.append(feed, kp, 'post.create', { text: 'second' })
+    await indexer.indexEvent(db, p2)
+
+    const posts = await timeline.getAuthorPosts(db, authorHex)
+    expect(posts).toHaveLength(2)
+    // Should only be post.create events
+    for (const post of posts) {
+      expect(post.kind).toBe('post.create')
+      expect(post.author).toBe(authorHex)
+    }
+
+    await store.close()
+  })
+
+  it('getAuthorPosts filters private posts for non-followers', async () => {
+    const store = createEssensStore()
+    await store.init(tmpDir)
+    const feed = store.getPrimaryFeed()
+    const db = store.getIndexDb()
+    const kpAuthor = generateKeypair()
+    const kpViewer = generateKeypair()
+    const feedMgr = createFeedManager()
+    const indexer = createIndexer()
+    const timeline = createTimelineQuery()
+
+    const authorHex = b4a.toString(kpAuthor.publicKey, 'hex')
+    const viewerHex = b4a.toString(kpViewer.publicKey, 'hex')
+
+    const pub = await feedMgr.append(feed, kpAuthor, 'post.create', { text: 'public' })
+    await indexer.indexEvent(db, pub)
+
+    const priv = await feedMgr.append(feed, kpAuthor, 'post.create', { text: 'private', visibility: 'private' })
+    await indexer.indexEvent(db, priv)
+
+    // Non-follower: only public
+    const nonFollower = await timeline.getAuthorPosts(db, authorHex, 50, {
+      currentAuthor: viewerHex,
+      followingSet: new Set(),
+    })
+    expect(nonFollower).toHaveLength(1)
+    expect(nonFollower[0].eventId).toBe(pub.id)
+
+    // Follower: both
+    const follower = await timeline.getAuthorPosts(db, authorHex, 50, {
+      currentAuthor: viewerHex,
+      followingSet: new Set([authorHex]),
+    })
+    expect(follower).toHaveLength(2)
+
+    // Author themselves: both
+    const self = await timeline.getAuthorPosts(db, authorHex, 50, {
+      currentAuthor: authorHex,
+      followingSet: new Set(),
+    })
+    expect(self).toHaveLength(2)
+
+    await store.close()
+  })
+
+  it('getAuthorPosts excludes tombstoned posts', async () => {
+    const store = createEssensStore()
+    await store.init(tmpDir)
+    const feed = store.getPrimaryFeed()
+    const db = store.getIndexDb()
+    const kp = generateKeypair()
+    const feedMgr = createFeedManager()
+    const indexer = createIndexer()
+    const timeline = createTimelineQuery()
+
+    const authorHex = b4a.toString(kp.publicKey, 'hex')
+
+    const p1 = await feedMgr.append(feed, kp, 'post.create', { text: 'keep' })
+    await indexer.indexEvent(db, p1)
+
+    const p2 = await feedMgr.append(feed, kp, 'post.create', { text: 'delete me' })
+    await indexer.indexEvent(db, p2)
+
+    const tomb = await feedMgr.append(feed, kp, 'post.delete_tombstone', { target: p2.id })
+    await indexer.indexEvent(db, tomb)
+
+    const posts = await timeline.getAuthorPosts(db, authorHex)
+    expect(posts).toHaveLength(1)
+    expect(posts[0].eventId).toBe(p1.id)
 
     await store.close()
   })

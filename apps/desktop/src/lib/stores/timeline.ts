@@ -1,6 +1,8 @@
 import { writable } from 'svelte/store';
 import { call } from '$lib/rpc-client';
 
+export type Visibility = 'public' | 'private';
+
 export interface TimelineEntry {
   key: string;
   eventId: string;
@@ -8,6 +10,7 @@ export interface TimelineEntry {
   seq: number;
   createdAt: string;
   kind: string;
+  visibility?: string;
 }
 
 export interface PostEvent {
@@ -16,7 +19,7 @@ export interface PostEvent {
   seq: number;
   createdAt: string;
   kind: string;
-  body: { text: string; tags?: string[] };
+  body: { text: string; tags?: string[]; visibility?: string };
 }
 
 export const timelineEntries = writable<PostEvent[]>([]);
@@ -35,10 +38,13 @@ export async function loadTimeline(limit = 50): Promise<void> {
   timelineEntries.set(posts);
 }
 
-export async function createPost(text: string): Promise<void> {
+export async function createPost(
+  text: string,
+  visibility: Visibility = 'public',
+): Promise<void> {
   await call('feed.append', {
     kind: 'post.create',
-    body: { text },
+    body: { text, visibility },
   });
   await loadTimeline();
 }

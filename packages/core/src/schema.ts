@@ -4,6 +4,7 @@ export const PostCreateSchema = z.object({
   text: z.string().min(1).max(500),
   replyTo: z.string().min(1).optional(),
   tags: z.array(z.string().min(1).max(32)).max(8).optional(),
+  visibility: z.enum(['public', 'private']).optional(),
 })
 
 export const ProfileUpdateSchema = z.object({

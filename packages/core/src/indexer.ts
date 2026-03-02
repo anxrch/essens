@@ -28,14 +28,22 @@ export function createIndexer(): Indexer {
       )
 
       if (kind === 'post.create') {
+        const postBody = body as PostCreateBody
+        const visibility = postBody.visibility ?? 'public'
+
         // Timeline (keyed by eventId for multi-feed uniqueness)
         await batch.put(
           `tl!${rt}!${id}`,
-          { eventId: id, author, seq, createdAt, kind },
+          { eventId: id, author, seq, createdAt, kind, visibility },
+        )
+
+        // Author events — update with visibility
+        await batch.put(
+          `author!${author}!${id}`,
+          { eventId: id, createdAt, kind, visibility },
         )
 
         // Tags
-        const postBody = body as PostCreateBody
         if (postBody.tags) {
           for (const tag of postBody.tags) {
             const normalized = tag.toLowerCase()

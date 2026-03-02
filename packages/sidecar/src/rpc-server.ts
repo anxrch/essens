@@ -134,7 +134,10 @@ export function createRpcServer(deps: RpcDeps) {
   methods.set('timeline.recent', async (params) => {
     const limit = (params.limit as number) ?? 50
     const db = deps.store.getIndexDb()
-    return deps.timeline.getRecentFiltered(db, limit)
+    const currentAuthor = deps.identity.getAuthorHex()
+    const followEntries = await deps.follows.getFollowing(db, currentAuthor)
+    const followingSet = new Set(followEntries.map(f => f.target))
+    return deps.timeline.getRecentFiltered(db, limit, { currentAuthor, followingSet })
   })
 
   methods.set('timeline.event', async (params) => {
@@ -148,6 +151,34 @@ export function createRpcServer(deps: RpcDeps) {
     const author = (params.author as string) ?? deps.identity.getAuthorHex()
     const db = deps.store.getIndexDb()
     return deps.timeline.getProfile(db, author)
+  })
+
+  // --- author ---
+  methods.set('author.posts', async (params) => {
+    const targetAuthor = params.author as string
+    if (!targetAuthor || targetAuthor.length !== 64 || !/^[0-9a-f]+$/.test(targetAuthor)) {
+      throw new Error('Invalid author: must be a 64-char hex public key')
+    }
+    const limit = (params.limit as number) ?? 50
+    const db = deps.store.getIndexDb()
+    const currentAuthor = deps.identity.getAuthorHex()
+    const isFollowing = await deps.follows.isFollowing(db, currentAuthor, targetAuthor)
+    const followingSet = isFollowing ? new Set([targetAuthor]) : new Set<string>()
+
+    const posts = await deps.timeline.getAuthorPosts(db, targetAuthor, limit, {
+      currentAuthor,
+      followingSet,
+    })
+
+    const profile = await deps.timeline.getProfile(db, targetAuthor)
+
+    return {
+      author: targetAuthor,
+      profile: profile ?? null,
+      posts,
+      isFollowing,
+      isSelf: currentAuthor === targetAuthor,
+    }
   })
 
   // --- index ---

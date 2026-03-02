@@ -18,6 +18,8 @@ export interface Keypair {
   secretKey: Buffer
 }
 
+export type Visibility = 'public' | 'private'
+
 export type EventKind =
   | 'post.create'
   | 'profile.update'
@@ -31,6 +33,7 @@ export interface PostCreateBody {
   text: string
   replyTo?: EventId
   tags?: string[]
+  visibility?: Visibility
 }
 
 export interface ProfileUpdateBody {
@@ -91,6 +94,7 @@ export interface TimelineEntry {
   seq: number
   createdAt: string
   kind: EventKind
+  visibility?: Visibility
 }
 
 export interface ProfileSnapshot {

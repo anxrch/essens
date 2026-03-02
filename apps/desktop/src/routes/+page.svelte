@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { initRpc } from '$lib/rpc-client';
   import { loadIdentity } from '$lib/stores/identity';
-  import { loadProfile } from '$lib/stores/profile';
+  import { loadProfile, viewingAuthor, loadAuthorProfile } from '$lib/stores/profile';
   import { loadTimeline } from '$lib/stores/timeline';
   import { loadFollowing } from '$lib/stores/follows';
   import { loadNetworkStatus } from '$lib/stores/network';
@@ -11,10 +11,15 @@
   import SettingsPanel from '$lib/components/SettingsPanel.svelte';
   import ComposePost from '$lib/components/ComposePost.svelte';
   import Timeline from '$lib/components/Timeline.svelte';
+  import AuthorProfile from '$lib/components/AuthorProfile.svelte';
 
   let ready = $state(false);
   let error = $state<string | null>(null);
   let settingsOpen = $state(false);
+
+  function handleAuthorClick(author: string) {
+    loadAuthorProfile(author);
+  }
 
   onMount(async () => {
     try {
@@ -47,8 +52,12 @@
   {:else}
     <TopBar ontoggle={() => (settingsOpen = !settingsOpen)} />
     <main class="main">
-      <ComposePost />
-      <Timeline />
+      {#if $viewingAuthor}
+        <AuthorProfile />
+      {:else}
+        <ComposePost />
+        <Timeline onauthorclick={handleAuthorClick} />
+      {/if}
     </main>
     <SettingsPanel open={settingsOpen} onclose={() => (settingsOpen = false)} />
   {/if}

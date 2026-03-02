@@ -1,7 +1,9 @@
 <script lang="ts">
-  import { createPost } from '$lib/stores/timeline';
+  import { createPost, type Visibility } from '$lib/stores/timeline';
+  import { Globe, Lock } from 'lucide-svelte';
 
   let text = $state('');
+  let visibility = $state<Visibility>('public');
   let posting = $state(false);
 
   async function handleSubmit() {
@@ -9,7 +11,7 @@
     if (!trimmed || posting) return;
     posting = true;
     try {
-      await createPost(trimmed);
+      await createPost(trimmed, visibility);
       text = '';
     } catch (err) {
       console.error('Failed to create post:', err);
@@ -23,6 +25,10 @@
       handleSubmit();
     }
   }
+
+  function toggleVisibility() {
+    visibility = visibility === 'public' ? 'private' : 'public';
+  }
 </script>
 
 <div class="compose">
@@ -35,8 +41,17 @@
     disabled={posting}
   ></textarea>
   <div class="compose-footer">
-    <span class="char-count">{text.length}/500</span>
-    <button onclick={handleSubmit} disabled={!text.trim() || posting}>
+    <div class="footer-left">
+      <button class="visibility-btn" onclick={toggleVisibility} title={visibility === 'public' ? 'Public — visible to everyone' : 'Followers only'}>
+        {#if visibility === 'public'}
+          <Globe size={14} /> Public
+        {:else}
+          <Lock size={14} /> Followers
+        {/if}
+      </button>
+      <span class="char-count">{text.length}/500</span>
+    </div>
+    <button class="post-btn" onclick={handleSubmit} disabled={!text.trim() || posting}>
       {posting ? 'Posting...' : 'Post'}
     </button>
   </div>
@@ -72,11 +87,33 @@
     align-items: center;
     margin-top: 0.5rem;
   }
+  .footer-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
   .char-count {
     font-size: 0.75rem;
     color: #666;
   }
-  button {
+  .visibility-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    color: #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.75rem;
+    transition: all 0.15s;
+  }
+  .visibility-btn:hover {
+    background: #333;
+    border-color: #555;
+  }
+  .post-btn {
     padding: 0.375rem 1rem;
     background: #2563eb;
     border: none;
@@ -85,11 +122,11 @@
     cursor: pointer;
     font-size: 0.875rem;
   }
-  button:disabled {
+  .post-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
-  button:hover:not(:disabled) {
+  .post-btn:hover:not(:disabled) {
     background: #1d4ed8;
   }
 </style>

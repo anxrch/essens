@@ -1,6 +1,12 @@
 <script lang="ts">
   import { timelineEntries } from '$lib/stores/timeline';
   import PostCard from './PostCard.svelte';
+
+  interface Props {
+    onauthorclick?: (author: string) => void;
+  }
+
+  let { onauthorclick }: Props = $props();
 </script>
 
 <div class="timeline">
@@ -10,7 +16,7 @@
     </div>
   {:else}
     {#each $timelineEntries as post (post.id)}
-      <PostCard {post} />
+      <PostCard {post} {onauthorclick} />
     {/each}
   {/if}
 </div>
