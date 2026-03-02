@@ -1,0 +1,149 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            sidecar_suffix: x86_64-unknown-linux-gnu
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            sidecar_suffix: aarch64-apple-darwin
+          - platform: macos-13
+            target: x86_64-apple-darwin
+            sidecar_suffix: x86_64-apple-darwin
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            sidecar_suffix: x86_64-pc-windows-msvc.exe
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm --filter @essens/core test
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Build core + sidecar TypeScript
+        run: |
+          pnpm --filter @essens/core build
+          pnpm --filter @essens/sidecar build
+
+      - name: Bundle sidecar with esbuild
+        run: |
+          npx esbuild packages/sidecar/dist/index.js \
+            --bundle \
+            --platform=node \
+            --target=node20 \
+            --outfile=packages/sidecar/dist/bundle.cjs \
+            --format=cjs \
+            --external:sodium-native
+
+      - name: Build sidecar SEA
+        shell: bash
+        run: |
+          cat > packages/sidecar/dist/sea-config.json <<SEACFG
+          {
+            "main": "packages/sidecar/dist/bundle.cjs",
+            "output": "packages/sidecar/dist/sea-prep.blob",
+            "disableExperimentalSEAWarning": true,
+            "useSnapshot": false,
+            "useCodeCache": true
+          }
+          SEACFG
+          node --experimental-sea-config packages/sidecar/dist/sea-config.json
+
+      - name: Create sidecar executable (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p apps/desktop/src-tauri/binaries
+          cp $(which node) "apps/desktop/src-tauri/binaries/essens-sidecar-${{ matrix.sidecar_suffix }}"
+          npx postject "apps/desktop/src-tauri/binaries/essens-sidecar-${{ matrix.sidecar_suffix }}" \
+            NODE_SEA_BLOB packages/sidecar/dist/sea-prep.blob \
+            --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+          chmod +x "apps/desktop/src-tauri/binaries/essens-sidecar-${{ matrix.sidecar_suffix }}"
+
+      - name: Create sidecar executable (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p apps/desktop/src-tauri/binaries
+          cp $(which node) "apps/desktop/src-tauri/binaries/essens-sidecar-${{ matrix.sidecar_suffix }}"
+          codesign --remove-signature "apps/desktop/src-tauri/binaries/essens-sidecar-${{ matrix.sidecar_suffix }}" || true
+          npx postject "apps/desktop/src-tauri/binaries/essens-sidecar-${{ matrix.sidecar_suffix }}" \
+            NODE_SEA_BLOB packages/sidecar/dist/sea-prep.blob \
+            --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 \
+            --macho-segment-name NODE_SEA
+          codesign --sign - "apps/desktop/src-tauri/binaries/essens-sidecar-${{ matrix.sidecar_suffix }}" || true
+          chmod +x "apps/desktop/src-tauri/binaries/essens-sidecar-${{ matrix.sidecar_suffix }}"
+
+      - name: Create sidecar executable (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path apps/desktop/src-tauri/binaries
+          Copy-Item (Get-Command node).Source "apps/desktop/src-tauri/binaries/essens-sidecar-${{ matrix.sidecar_suffix }}"
+          npx postject "apps/desktop/src-tauri/binaries/essens-sidecar-${{ matrix.sidecar_suffix }}" `
+            NODE_SEA_BLOB packages/sidecar/dist/sea-prep.blob `
+            --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+
+      - name: Build SvelteKit frontend
+        run: pnpm --filter @essens/desktop build
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Essens ${{ github.ref_name }}'
+          releaseBody: |
+            P2P microblog with multi-device support.
+
+            ## Downloads
+            - **Linux**: `.AppImage` or `.deb`
+            - **macOS**: `.dmg`
+            - **Windows**: `.exe` (NSIS installer) or `.msi`
+          releaseDraft: false
+          prerelease: true
+          args: --target ${{ matrix.target }}
