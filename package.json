@@ -11,6 +11,8 @@
     "dev": "pnpm -F @essens/desktop dev"
   },
   "devDependencies": {
+    "esbuild": "^0.27.3",
+    "postject": "1.0.0-alpha.6",
     "typescript": "^5.7.0",
     "vitest": "^4.0.0"
   }
