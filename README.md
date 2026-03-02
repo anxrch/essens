@@ -1,6 +1,25 @@
-# Essens
+<p align="center">
+  <img src="apps/desktop/src-tauri/icons/128x128@2x.png" width="128" height="128" alt="Essens icon">
+</p>
 
-Peer-to-peer microblog with multi-device support. No servers, no accounts — just your keys.
+<h1 align="center">Essens</h1>
+
+<p align="center">
+  Peer-to-peer microblog with multi-device support.<br>
+  No servers, no accounts — just your keys.
+</p>
+
+<p align="center">
+  <a href="https://github.com/anxrch/essens/releases"><img src="https://img.shields.io/github/v/release/anxrch/essens?style=flat-square" alt="Release"></a>
+  <a href="https://github.com/anxrch/essens/actions"><img src="https://img.shields.io/github/actions/workflow/status/anxrch/essens/ci.yml?style=flat-square&label=CI" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/anxrch/essens?style=flat-square" alt="License"></a>
+</p>
+
+<p align="center">
+  <b>English</b> | <a href="README.ko.md">한국어</a> | <a href="README.ja.md">日本語</a>
+</p>
+
+---
 
 Built on [Hypercore](https://docs.holepunch.to/) for append-only feeds and DHT-based peer discovery, wrapped in a [Tauri 2](https://v2.tauri.app/) desktop app.
 
